@@ -1,60 +1,109 @@
-import './style.css'
-import heroImg from './assets/hero.png'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import { setupCounter } from './counter.ts'
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+import Phaser from "phaser";
+import TetrisScene from "./game/TetrisScene";
+import "./style.css";
 
-<div class="ticks"></div>
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+const game = new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: "game",
+  width: 390,
+  height: 650,
+  backgroundColor: "#090d1b",
+  antialias: true,
+  render: {
+    antialias: true,
+    pixelArt: false,
+    roundPixels: true,
+  },
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: 390,
+    height: 650,
+  },
+  input: {
+    activePointers: 3,
+  },
+  scene: [TetrisScene],
+});
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+declare global {
+  interface Window {
+    tetrisGame: Phaser.Game;
+  }
+}
+
+window.tetrisGame = game;
+
+function getScene(): TetrisScene | undefined {
+  return game.scene.getScene("Tetris") as TetrisScene | undefined;
+}
+
+document.querySelectorAll<HTMLButtonElement>("[data-action]")
+  .forEach((button) => {
+    const action = button.dataset.action!;
+    let repeatTimer: number | undefined;
+
+    const execute = () => {
+      const scene = getScene();
+      if (!scene?.sys.isActive()) return;
+
+      switch (action) {
+        case "left":
+          scene.move(-1);
+          break;
+        case "right":
+          scene.move(1);
+          break;
+        case "down":
+          scene.softDrop();
+          break;
+        case "rotate":
+          scene.rotate();
+          break;
+        case "hardDrop":
+          scene.hardDrop();
+          break;
+      }
+    };
+
+    const start = (event: PointerEvent) => {
+      event.preventDefault();
+      if (button.disabled) return;
+
+      try {
+        button.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture is optional.
+      }
+
+      execute();
+
+      // Hold left/right/down to repeat movement.
+      if (["left", "right", "down"].includes(action)) {
+        repeatTimer = window.setTimeout(() => {
+          repeatTimer = window.setInterval(execute, 75);
+        }, 180);
+      }
+    };
+
+    const stop = () => {
+      if (repeatTimer !== undefined) {
+        window.clearTimeout(repeatTimer);
+        window.clearInterval(repeatTimer);
+        repeatTimer = undefined;
+      }
+    };
+
+    button.addEventListener("pointerdown", start);
+    button.addEventListener("pointerup", stop);
+    button.addEventListener("pointercancel", stop);
+    button.addEventListener("lostpointercapture", stop);
+    button.addEventListener("contextmenu", (event) => event.preventDefault());
+  });
+
+document.getElementById("pauseBtn")?.addEventListener("click", () => {
+  getScene()?.togglePause();
+});
